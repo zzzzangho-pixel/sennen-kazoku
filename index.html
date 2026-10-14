@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#eff3e8">
+  <title>천년가족 · 브라우저 에디션</title>
+  <style>
+    *{box-sizing:border-box}
+    body{margin:0;min-height:100dvh;display:grid;place-items:center;padding:24px;background:#eff3e8;color:#223d49;font-family:system-ui,-apple-system,"Apple SD Gothic Neo","Malgun Gothic",sans-serif;text-align:center}
+    main{width:min(100%,420px);padding:32px 24px;border-radius:20px;background:#fffcf5;box-shadow:0 12px 40px #223d4912}
+    h1{margin:0 0 18px;font-size:28px}
+    p{margin:8px 0;line-height:1.7}
+    #hint{color:#708087;font-size:14px}
+    button{margin-top:18px;border:0;border-radius:12px;padding:13px 24px;background:#246b6f;color:white;font:inherit;cursor:pointer;touch-action:manipulation}
+    button:focus-visible{outline:3px solid #dc825c;outline-offset:3px}
+    button[hidden]{display:none}
+  </style>
+</head>
+<body>
+  <main>
+    <h1>천년가족</h1>
+    <p id="status" role="status" aria-live="polite">게임을 준비하고 있어요.</p>
+    <p id="hint">잠시만 기다려 주세요.</p>
+    <button id="retry" type="button" hidden>다시 시도</button>
+  </main>
+  <script>
+    (() => {
+      "use strict";
+      const files = [
+        ["runtime-01.bin", 8000000],
+        ["runtime-02.bin", 8000000],
+        ["runtime-03.bin", 8000000],
+        ["runtime-04.bin", 8000000],
+        ["runtime-05.bin", 8000000],
+        ["runtime-06.bin", 8000000],
+        ["runtime-07.bin", 8000000],
+        ["runtime-08.bin", 3858815]
+      ];
+      const expectedLength = 59858815;
+      const expectedHash = "ed76b05ea8413fe3487d42f6987e00e69a2680dd4a55b190db41ed152319de44";
+      const status = document.getElementById("status");
+      const hint = document.getElementById("hint");
+      const retry = document.getElementById("retry");
+      let loading = false;
+      async function start() {
+        if (loading) return;
+        loading = true;
+        retry.hidden = true;
+        status.textContent = "게임을 준비하고 있어요.";
+        hint.textContent = "잠시만 기다려 주세요.";
+        try {
+          const parts = await Promise.all(files.map(async ([name, length]) => {
+            const response = await fetch(new URL(name, document.baseURI), {
+              mode: "same-origin", credentials: "omit", cache: "no-cache"
+            });
+            if (!response.ok) throw new Error("Unable to load game");
+            const bytes = new Uint8Array(await response.arrayBuffer());
+            if (bytes.length !== length) throw new Error("Incomplete game");
+            return bytes;
+          }));
+          let bytes = new Uint8Array(expectedLength);
+          let offset = 0;
+          for (const part of parts) {
+            bytes.set(part, offset);
+            offset += part.length;
+          }
+          parts.length = 0;
+          if (offset !== expectedLength) throw new Error("Incomplete game");
+          if (globalThis.crypto && globalThis.crypto.subtle) {
+            const digest = await globalThis.crypto.subtle.digest("SHA-256", bytes);
+            const hash = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, "0")).join("");
+            if (hash !== expectedHash) throw new Error("Game changed while loading");
+          }
+          let html = new TextDecoder("utf-8", {fatal:true}).decode(bytes);
+          bytes = null;
+          document.open();
+          document.write(html);
+          html = null;
+          document.close();
+        } catch (_) {
+          loading = false;
+          status.textContent = "게임을 불러오지 못했어요.";
+          hint.textContent = "연결을 확인하고 다시 시도해 주세요.";
+          retry.hidden = false;
+        }
+      }
+      retry.addEventListener("click", start);
+      start();
+    })();
+  </script>
+</body>
+</html>
